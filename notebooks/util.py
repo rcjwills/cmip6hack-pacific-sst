@@ -6,6 +6,9 @@
 import re
 import socket
 import numpy as np
+import intake
+import xarray as xr
+import cftime
 
 
 def is_ncar_host():
@@ -59,6 +62,8 @@ def simple_spatial_average(dsvar, lat_bounds=[-90, 90], lon_bounds=[0, 360]):
     return x
 
 def upscale(x,y,field,f):
+    'Reduces resolution of field by factor f'
+    
     xdel=(x[1]-x[0])/2
     xbin=np.zeros(int(len(x)/2)+1)
     xbin[0:-1]=x[::f].values-xdel.values
@@ -78,3 +83,14 @@ def upscale(x,y,field,f):
     fieldn[y.name].values=yn
     
     return fieldn
+
+def reindex_time(startingtimes):
+    newtimes = startingtimes.values
+    for i in range(0,len(startingtimes)):
+        yr = int(str(startingtimes.values[i])[0:4])
+        mon = int(str(startingtimes.values[i])[5:7])
+        day = int(str(startingtimes.values[i])[8:10])
+        hr = int(str(startingtimes.values[i])[11:13])
+        newdate = cftime.DatetimeProlepticGregorian(yr,mon,15)
+        newtimes[i]=newdate
+    return newtimes
