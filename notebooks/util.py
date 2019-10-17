@@ -57,3 +57,24 @@ def simple_spatial_average(dsvar, lat_bounds=[-90, 90], lon_bounds=[0, 360]):
     x = (dsvar_subset*w).mean(dim=['lat', 'lon']) / w.mean(dim=['lat', 'lon'])
 
     return x
+
+def upscale(x,y,field,f):
+    xdel=(x[1]-x[0])/2
+    xbin=np.zeros(int(len(x)/2)+1)
+    xbin[0:-1]=x[::f].values-xdel.values
+    xbin[-1]=x[-1].values+xdel.values
+    
+    ydel=(y[1]-y[0])/2
+    ybin=np.zeros(int(len(y)/2)+1)
+    ybin[0:-1]=y[::f].values-ydel.values
+    ybin[-1]=y[-1].values+ydel.values
+    
+    xn=x.groupby_bins(group=x.name,bins=xbin).mean(x.name)
+    yn=y.groupby_bins(group=y.name,bins=ybin).mean(y.name)
+    fieldn=field.groupby_bins(group=x.name,bins=xbin).mean(x.name,skipna=True)\
+        .groupby_bins(group=y.name,bins=ybin).mean(y.name,skipna=True)
+    fieldn=fieldn.rename({'lat_bins':'lat','lon_bins':'lon'})
+    fieldn[x.name].values=xn
+    fieldn[y.name].values=yn
+    
+    return fieldn
