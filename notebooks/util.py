@@ -1,11 +1,12 @@
 """This is a general purpose module containing routines
-(a) that are used in multiple notebooks; or 
+(a) that are used in multiple notebooks; or
 (b) that are complicated and would thus otherwise clutter notebook design.
 """
 
 import re
 import socket
 import numpy as np
+from datetime import datetime
 
 
 def is_ncar_host():
@@ -57,3 +58,57 @@ def simple_spatial_average(dsvar, lat_bounds=[-90, 90], lon_bounds=[0, 360]):
     x = (dsvar_subset*w).mean(dim=['lat', 'lon']) / w.mean(dim=['lat', 'lon'])
 
     return x
+
+
+def get_anomaly(dsvar):
+    '''
+    get_anomaly(dsvar)
+
+    remove climatological annual cycle to compute anomalies
+
+
+    Parameters
+    ----------
+    dsvar : data array variable
+
+
+    Returns
+    -------
+    NewArray : DataArray
+        New DataArray with seasonal cycle removed.
+
+    '''
+    climatology = dsvar.groupby('time.month').mean('time')
+    anomalies = dsvar.groupby('time.month') - climatology
+    return anomalies
+
+
+def get_decimal_time(dsvar):
+    '''
+    get_decimal_time(dsvar)
+
+    get the time in decimal units (e.g., 1979.0438...)
+
+
+    Parameters
+    ----------
+    dsvar : data array variable
+
+
+    Returns
+    -------
+    dtime : ndarray
+        Array of time axis in decimal units
+
+    '''
+    dtime = []
+    for t in dsvar.time:
+        # differentiate between datetime64 and datetime objects
+        if isinstance(t.item(), int):
+            t = datetime.utcfromtimestamp(t.item()/1e9)
+        else:
+            t = t.item()
+        doy = t.timetuple().tm_yday
+        dtime.append(t.year + doy / 365.)
+    dtime = np.array(dtime)
+    return dtime
