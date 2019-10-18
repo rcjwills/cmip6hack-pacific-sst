@@ -216,3 +216,43 @@ def reindex_time(startingtimes):
         newdate = cftime.DatetimeProlepticGregorian(yr,mon,15)
         newtimes[i]=newdate
     return newtimes
+
+
+def _compute_slope(y):
+    """
+    Private function to compute slopes at each grid cell using
+    polyfit.
+    """
+    x = np.arange(len(y))
+    return np.polyfit(x, y, 1)[0] # return only the slope
+
+
+def compute_slope(da):
+    """
+    Computes linear slope (m) at each grid cell.
+   
+    Args:
+      da: xarray DataArray to compute slopes for
+     
+    Returns:
+      xarray DataArray with slopes computed at each grid cell.
+    """
+    # apply_ufunc can apply a raw numpy function to a grid.
+    #
+    # vectorize is only needed for functions that aren't already
+    # vectorized. You don't need it for polyfit in theory, but it's
+    # good to use when using things like np.cov.
+    #
+    # dask='parallelized' parallelizes this across dask chunks. It requires
+    # an output_dtypes of the numpy array datatype coming out.
+    #
+    # input_core_dims should pass the dimension that is being *reduced* by this operation,
+    # if one is being reduced.
+    slopes = xr.apply_ufunc(_compute_slope,
+                            da,
+                            vectorize=True,
+                            dask='parallelized',
+                            input_core_dims=[['time']],
+                            output_dtypes=[float],
+                            )
+    return slopes
