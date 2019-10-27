@@ -44,10 +44,6 @@ def simple_spatial_average(dsvar, lat_bounds=[-90, 90], lon_bounds=[0, 360]):
 
     '''
     # Make sure lat and lon ranges are in correct order
-    if lat_bounds[0] > lat_bounds[1]:
-        lat_bounds = np.flipud(lat_bounds)
-    if lon_bounds[0] > lon_bounds[1]:
-        lon_bounds = np.flipud(lon_bounds)
     if 'lon' not in dsvar.dims:
         lonDim = 'longitude'
     else:
@@ -56,6 +52,12 @@ def simple_spatial_average(dsvar, lat_bounds=[-90, 90], lon_bounds=[0, 360]):
         latDim = 'latitude'
     else:
         latDim = 'lat'
+    if np.sign(lat_bounds[0] - lat_bounds[1]) != np.sign(dsvar[latDim][0] -
+                                                         dsvar[latDim][1]):
+        lat_bounds = np.flipud(lat_bounds)
+    if np.sign(lon_bounds[0] - lon_bounds[1]) != np.sign(dsvar[lonDim][0] -
+                                                         dsvar[lonDim][1]):
+        lon_bounds = np.flipud(lon_bounds)
     if float(dsvar[lonDim].min().values) < 0.:
         raise ValueError('Not expecting longitude values less than 0.')
     # Subset data into a box
@@ -66,7 +68,8 @@ def simple_spatial_average(dsvar, lat_bounds=[-90, 90], lon_bounds=[0, 360]):
     # Ensure weights are the same shape as the data array
     w = w.broadcast_like(dsvar_subset)
     # Mask out NaN values in weighting matrix
-    w = w.where(~np.isnan(dsvar_subset))
+    w = w.where(~np.isnan(dsvar_subset), 0)
+    dsvar_subset = dsvar_subset.where(~np.isnan(dsvar_subset), 0)
     # Convolve weights with data array
     x = (dsvar_subset*w).sum(dim=['lat', 'lon']) / w.sum(dim=['lat', 'lon'])
 
