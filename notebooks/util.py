@@ -44,21 +44,34 @@ def simple_spatial_average(dsvar, lat_bounds=[-90, 90], lon_bounds=[0, 360]):
 
     '''
     # Make sure lat and lon ranges are in correct order
-    if lat_bounds[0] > lat_bounds[1]:
+    if 'lon' not in dsvar.dims:
+        lonDim = 'longitude'
+    else:
+        lonDim = 'lon'
+    if 'lat' not in dsvar.dims:
+        latDim = 'latitude'
+    else:
+        latDim = 'lat'
+    if np.sign(lat_bounds[0] - lat_bounds[1]) != np.sign(dsvar[latDim][0] -
+                                                         dsvar[latDim][1]):
         lat_bounds = np.flipud(lat_bounds)
-    if lon_bounds[0] > lon_bounds[1]:
+    if np.sign(lon_bounds[0] - lon_bounds[1]) != np.sign(dsvar[lonDim][0] -
+                                                         dsvar[lonDim][1]):
         lon_bounds = np.flipud(lon_bounds)
-    if float(dsvar.lon.min().values) < 0.:
+    if float(dsvar[lonDim].min().values) < 0.:
         raise ValueError('Not expecting longitude values less than 0.')
     # Subset data into a box
     dsvar_subset = dsvar.sel(lat=slice(lat_bounds[0], lat_bounds[1]),
                              lon=slice(lon_bounds[0], lon_bounds[1]))
     # Get weights (cosine(latitude))
-    w = np.cos(np.deg2rad(dsvar_subset.lat))
+    w = np.cos(np.deg2rad(dsvar_subset[latDim]))
     # Ensure weights are the same shape as the data array
     w = w.broadcast_like(dsvar_subset)
+    # Mask out NaN values in weighting matrix
+    w = w.where(~np.isnan(dsvar_subset), 0)
+    dsvar_subset = dsvar_subset.where(~np.isnan(dsvar_subset), 0)
     # Convolve weights with data array
-    x = (dsvar_subset*w).mean(dim=['lat', 'lon']) / w.mean(dim=['lat', 'lon'])
+    x = (dsvar_subset*w).sum(dim=['lat', 'lon']) / w.sum(dim=['lat', 'lon'])
 
     return x
 
@@ -117,6 +130,62 @@ def get_decimal_time(dsvar):
     return dtime
 
 
+def spatial_trends(dsvar, anom=True):
+    '''
+    spatial_trends(dsvar)
+
+    get a map of spatial trends for a data array
+
+
+    Parameters
+    ----------
+    dsvar : data array variable
+
+    Optional Arguments
+    ----------
+    anom : boolean to specify whether anomalies should
+           be computed (default is True)
+
+    Returns
+    -------
+    NewArray : DataArray
+        Array of trends (units / year)
+
+    '''
+    # get decimal time for trend calculations
+    time_decimal = get_decimal_time(dsvar)
+    # deal with weird lat / lon
+    if 'lon' not in dsvar.dims:
+        lonDim = 'longitude'
+    else:
+        lonDim = 'lon'
+    if 'lat' not in dsvar.dims:
+        latDim = 'latitude'
+    else:
+        latDim = 'lat'
+    # compute anomalies
+    if anom:
+        dsvar_anom = np.array(get_anomaly(dsvar))
+    else:
+        dsvar_anom = np.array(dsvar)
+    # compute trends
+    m, b = np.polyfit(time_decimal, np.reshape(dsvar_anom, (len(time_decimal), -1)), 1)
+    # transform into correct coordinates
+    m = np.reshape(m, (len(dsvar[latDim]), len(dsvar[lonDim])))
+    # get coordinates for new array (minus time)
+    coords = []
+    coords_str = []
+    for dim in dsvar.dims:
+        if dim == 'time':
+            continue
+        coords.append(dsvar[dim])
+        coords_str.append(dim)
+    # create a data array and add coordinates
+    trend = xr.DataArray(m, coords=coords, dims=coords_str)
+    # return data array
+    return trend
+
+
 def upscale(x,y,field,f):
     'Reduces resolution of field by factor f'
     
@@ -137,7 +206,7 @@ def upscale(x,y,field,f):
     fieldn=fieldn.rename({'lat_bins':'lat','lon_bins':'lon'})
     fieldn[x.name].values=xn
     fieldn[y.name].values=yn
-    
+
     return fieldn
 
 def reindex_time(startingtimes):
@@ -151,6 +220,7 @@ def reindex_time(startingtimes):
         newtimes[i]=newdate
     return newtimes
 
+
 def _compute_slope(y):
     """
     Private function to compute slopes at each grid cell using
@@ -158,6 +228,7 @@ def _compute_slope(y):
     """
     x = np.arange(len(y))
     return np.polyfit(x, y, 1)[0] # return only the slope
+
 
 def compute_slope(da):
     """
